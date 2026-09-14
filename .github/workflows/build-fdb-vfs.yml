@@ -34,15 +34,18 @@ jobs:
         run: |
           make native
 
-      - name: Confirm libsqlitejdbc.so exports the FDB VFS symbols
+      - name: Confirm libsqlitejdbc.so has the FDB VFS symbols and links libfdb_c
         run: |
           set -eux
           so=$(find src/main/resources/org/sqlite/native/Linux/x86_64 -name '*.so' | head -1)
           test -n "$so"
-          nm -gU "$so" 2>/dev/null || true
-          # Sanity: the object was linked (extension-registration path present)
-          objdump -T "$so" | grep -E "weft_fdb_start|weft_vfs_register" || \
-            (echo "weft_* symbols missing" && exit 1)
+          # sqlite-jdbc builds with -fvisibility=hidden, so weft_* symbols are
+          # not in the dynamic table; --defined-only sees the internal ones.
+          nm --defined-only "$so" | grep -E "weft_fdb_start|weft_vfs_register" \
+            || (echo "weft_* symbols not compiled in" && exit 1)
+          # And the runtime dep on libfdb_c must be recorded.
+          ldd "$so" | grep -E "libfdb_c" \
+            || (echo "libfdb_c not linked" && exit 1)
 
       - name: Package the jar
         run: |
