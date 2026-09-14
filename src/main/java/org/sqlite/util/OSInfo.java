@@ -24,6 +24,7 @@
 // --------------------------------------
 package org.sqlite.util;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,8 +32,6 @@ import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.stream.Stream;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Provides OS name and architecture name.
@@ -49,6 +48,7 @@ public class OSInfo {
     public static final String IA64 = "ia64";
     public static final String PPC = "ppc";
     public static final String PPC64 = "ppc64";
+    public static final String RISCV64 = "riscv64";
 
     static {
         // x86 mappings
@@ -88,6 +88,8 @@ public class OSInfo {
         archMapping.put("power_rs64", PPC64);
         archMapping.put("ppc64el", PPC64);
         archMapping.put("ppc64le", PPC64);
+
+        archMapping.put(RISCV64, RISCV64);
     }
 
     public static void main(String[] args) {
@@ -113,7 +115,21 @@ public class OSInfo {
     }
 
     public static boolean isAndroid() {
-        return isAndroidRuntime() || isAndroidTermux();
+        return isAndroidRuntime() || isAndroidTermux() || isRunningAndroid();
+    }
+
+    private static boolean isRunningAndroid() {
+        // This file is guaranteed to be present on every android version since 1.6 (Donut, API 4),
+        // see https://developer.android.com/ndk/guides/stable_apis#graphics
+        // We don't use libc/libm/libdl because that has changed what directory its pointing to and
+        // OEMs implement the symlink that allows backwards compatibility
+        // for apps that use the old path differently, which may cause this check to fail because
+        // of common undocumented behaviour. See
+        // https://developer.android.com/about/versions/10/behavior-changes-all#bionic
+        File androidGLES = new File("/system/lib/libGLESv1_CM.so");
+        File android64GLES = new File("/system/lib64/libGLESv1_CM.so");
+
+        return android64GLES.exists() || androidGLES.exists();
     }
 
     public static boolean isAndroidRuntime() {
@@ -128,26 +144,34 @@ public class OSInfo {
         }
     }
 
+    @AndroidSignatureIgnore(explanation = "Should not reach this code path")
     public static boolean isMusl() {
         Path mapFilesDir = Paths.get("/proc/self/map_files");
         try (Stream<Path> dirStream = Files.list(mapFilesDir)) {
-            return dirStream
-                    .map(
-                            path -> {
-                                try {
-                                    return path.toRealPath().toString();
-                                } catch (IOException e) {
-                                    return "";
-                                }
-                            })
-                    .anyMatch(s -> s.toLowerCase().contains("musl"));
+            boolean found =
+                    dirStream
+                            .map(OSInfo::toRealPathOrEmpty)
+                            .anyMatch(s -> s.toLowerCase().contains("musl"));
+            if (found) {
+                return true;
+            }
         } catch (Exception ignored) {
-            // fall back to checking for alpine linux in the event we're using an older kernel which
-            // may not fail the above check
-            return isAlpineLinux();
+        }
+        // fall back to checking for alpine linux in the event we're using an older kernel which
+        // may not fail the above check
+        return isAlpineLinux();
+    }
+
+    @AndroidSignatureIgnore(explanation = "Should not reach this code path")
+    private static String toRealPathOrEmpty(Path path) {
+        try {
+            return path.toRealPath().toString();
+        } catch (IOException e) {
+            return "";
         }
     }
 
+    @AndroidSignatureIgnore(explanation = "Should not reach this code path")
     private static boolean isAlpineLinux() {
         try (Stream<String> osLines = Files.lines(Paths.get("/etc/os-release"))) {
             return osLines.anyMatch(l -> l.startsWith("ID") && l.contains("alpine"));
@@ -160,7 +184,7 @@ public class OSInfo {
         try {
             return processRunner.runAndWaitFor("uname -m");
         } catch (Throwable e) {
-            LogHolder.logger.error("Error while running uname -m", e);
+            LogHolder.logger.error(() -> "Error while running uname -m", e);
             return "unknown";
         }
     }
@@ -191,12 +215,18 @@ public class OSInfo {
                 // Use armv5, soft-float ABI
                 return "arm";
             } else if (armType.startsWith("aarch64")) {
-                // Use arm64
-                return "aarch64";
+                boolean is32bitJVM = "32".equals(System.getProperty("sun.arch.data.model"));
+                if (is32bitJVM) {
+                    // An aarch64 architecture should support armv7
+                    return "armv7";
+                } else {
+                    // Use arm64
+                    return "aarch64";
+                }
             }
 
             // Java 1.8 introduces a system property to determine armel or armhf
-            // http://bugs.java.com/bugdatabase/view_bug.do?bug_id=8005545
+            // https://bugs.openjdk.org/browse/JDK-8005545
             String abi = System.getProperty("sun.arch.abi");
             if (abi != null && abi.startsWith("gnueabihf")) {
                 return "armv7";
@@ -222,7 +252,8 @@ public class OSInfo {
                     }
                 } else {
                     LogHolder.logger.warn(
-                            "readelf not found. Cannot check if running on an armhf system, armel architecture will be presumed");
+                            () ->
+                                    "readelf not found. Cannot check if running on an armhf system, armel architecture will be presumed");
                 }
             } catch (IOException | InterruptedException e) {
                 // ignored: fall back to "arm" arch (soft-float ABI)
@@ -256,10 +287,10 @@ public class OSInfo {
             return "Mac";
         } else if (osName.contains("AIX")) {
             return "AIX";
-        } else if (isMusl()) {
-            return "Linux-Musl";
         } else if (isAndroid()) {
             return "Linux-Android";
+        } else if (isMusl()) {
+            return "Linux-Musl";
         } else if (osName.contains("Linux")) {
             return "Linux";
         } else {

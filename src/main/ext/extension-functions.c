@@ -286,9 +286,12 @@ static const int utf_mask[] = {
   xtra = xtra_utf8_bytes[c];                           \
   switch( xtra ){                                      \
     case 4: c = (int)0xFFFD; break;                    \
-    case 3: c = (c<<6) + *(zIn)++;                     \
-    case 2: c = (c<<6) + *(zIn)++;                     \
-    case 1: c = (c<<6) + *(zIn)++;                     \
+    case 3: if((*(zIn)&0xc0)!=0x80){c=0xFFFD;break;}   \
+            c = (c<<6) + *(zIn)++;                     \
+    case 2: if((*(zIn)&0xc0)!=0x80){c=0xFFFD;break;}   \
+            c = (c<<6) + *(zIn)++;                     \
+    case 1: if((*(zIn)&0xc0)!=0x80){c=0xFFFD;break;}   \
+            c = (c<<6) + *(zIn)++;                     \
     c -= xtra_utf8_bits[xtra];                         \
     if( (utf_mask[xtra]&c)==0                          \
         || (c&0xFFFFF800)==0xD800                      \
@@ -1806,7 +1809,7 @@ int RegisterExtensionFunctions(sqlite3 *db){
     { "stdev",            1, 0, 0, varianceStep, stdevFinalize  },
     { "variance",         1, 0, 0, varianceStep, varianceFinalize  },
     { "mode",             1, 0, 0, modeStep,     modeFinalize  },
-    { "median",           1, 0, 0, modeStep,     medianFinalize  },
+//    { "median",           1, 0, 0, modeStep,     medianFinalize  },
     { "lower_quartile",   1, 0, 0, modeStep,     lower_quartileFinalize  },
     { "upper_quartile",   1, 0, 0, modeStep,     upper_quartileFinalize  },
   };

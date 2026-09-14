@@ -25,6 +25,7 @@ import java.util.Calendar;
 import org.sqlite.SQLiteConnection;
 import org.sqlite.core.CorePreparedStatement;
 import org.sqlite.core.DB;
+import org.sqlite.util.AndroidSignatureIgnore;
 
 public abstract class JDBC3PreparedStatement extends CorePreparedStatement {
 
@@ -169,6 +170,7 @@ public abstract class JDBC3PreparedStatement extends CorePreparedStatement {
     }
 
     /** @see java.sql.ParameterMetaData#getParameterTypeName(int) */
+    @AndroidSignatureIgnore(explanation = "Android does not support java.sql.JDBCType")
     public String getParameterTypeName(int pos) throws SQLException {
         checkIndex(pos);
         return JDBCType.valueOf(getParameterType(pos)).getName();
@@ -390,13 +392,14 @@ public abstract class JDBC3PreparedStatement extends CorePreparedStatement {
     /** @see java.sql.PreparedStatement#setCharacterStream(int, java.io.Reader, int) */
     public void setCharacterStream(int pos, Reader reader, int length) throws SQLException {
         try {
-            // copy chars from reader to StringBuffer
-            StringBuffer sb = new StringBuffer();
+            // copy chars from reader to StringBuilder
+            StringBuilder sb = new StringBuilder();
             char[] cbuf = new char[8192];
             int cnt;
 
-            while ((cnt = reader.read(cbuf)) > 0) {
+            while ((cnt = reader.read(cbuf, 0, Math.min(length, cbuf.length))) > 0) {
                 sb.append(cbuf, 0, cnt);
+                length -= cnt;
             }
 
             // set as string

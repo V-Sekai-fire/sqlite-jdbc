@@ -1,14 +1,14 @@
 package org.sqlite;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLConnection;
-import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
@@ -251,26 +251,7 @@ public abstract class SQLiteConnection implements Connection {
                     throw new SQLException(String.format("failed to load %s: %s", resourceName, e));
                 }
             } else {
-                File file = new File(fileName).getAbsoluteFile();
-                File parent = file.getParentFile();
-                if (parent != null && !parent.exists()) {
-                    for (File up = parent; up != null && !up.exists(); ) {
-                        parent = up;
-                        up = up.getParentFile();
-                    }
-                    throw new SQLException(
-                            "path to '" + fileName + "': '" + parent + "' does not exist");
-                }
-
-                // check write access if file does not exist
-                try {
-                    // The extra check to exists() is necessary as createNewFile()
-                    // does not follow the JavaDoc when used on read-only shares.
-                    if (!file.exists() && file.createNewFile()) file.delete();
-                } catch (Exception e) {
-                    throw new SQLException("opening db: '" + fileName + "': " + e.getMessage());
-                }
-                fileName = file.getAbsolutePath();
+                fileName = new File(fileName).getAbsolutePath();
             }
         }
 
@@ -335,8 +316,16 @@ public abstract class SQLiteConnection implements Connection {
         URLConnection conn = resourceAddr.openConnection();
         // Disable caches to avoid keeping unnecessary file references after the single-use copy
         conn.setUseCaches(false);
-        try (InputStream reader = conn.getInputStream()) {
-            Files.copy(reader, dbFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        try (InputStream reader = conn.getInputStream();
+                OutputStream writer = new FileOutputStream(dbFile)) {
+            // Replace this code with buffer copy so we don't rely on java.nio package for Android
+            // compatibility
+            // Files.copy(reader, dbFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            while ((bytesRead = reader.read(buffer)) != -1) {
+                writer.write(buffer, 0, bytesRead);
+            }
             return dbFile;
         }
     }

@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Properties;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledInNativeImage;
@@ -477,6 +478,99 @@ public class DBMetaDataTest {
     }
 
     @Test
+    public void getTablesTypeWithQuote() throws SQLException {
+        // a type containing a single quote must be treated as a literal, not break out of the
+        // TABLE_TYPE IN (...) list; 'X' matches nothing so the result must be empty
+        try (ResultSet rs = meta.getTables(null, null, null, new String[] {"X') OR ('1'='1"})) {
+            assertThat(rs.next()).isFalse();
+        }
+    }
+
+    @Test
+    public void getImportedKeysCatalogSchemaWithQuote() throws SQLException {
+        stat.executeUpdate("create table parent (id integer primary key)");
+        stat.executeUpdate(
+                "create table child1 (id integer primary key, pid integer, foreign key(pid) references parent(id))");
+        // a catalog/schema containing a single quote must be carried through as a literal,
+        // not break out of the surrounding string in the generated metadata query
+        try (ResultSet rs = meta.getImportedKeys("ca'talog", "sch'ema", "child1")) {
+            assertThat(rs.next()).isTrue();
+            assertThat(rs.getString("PKTABLE_CAT")).isEqualTo("ca'talog");
+            assertThat(rs.getString("PKTABLE_SCHEM")).isEqualTo("sch'ema");
+        }
+    }
+
+    @Test
+    public void getExportedKeysCatalogSchemaWithQuote() throws SQLException {
+        stat.executeUpdate("create table parent (id integer primary key)");
+        stat.executeUpdate(
+                "create table child1 (id integer primary key, pid integer, foreign key(pid) references parent(id))");
+        try (ResultSet rs = meta.getExportedKeys("ca'talog", "sch'ema", "parent")) {
+            assertThat(rs.next()).isTrue();
+            assertThat(rs.getString("PKTABLE_CAT")).isEqualTo("ca'talog");
+            assertThat(rs.getString("PKTABLE_SCHEM")).isEqualTo("sch'ema");
+        }
+    }
+
+    @Test
+    public void getExportedKeysTableNameWithQuote() throws SQLException {
+        // the primary-key table name is read back from sqlite_schema and put into PKTABLE_NAME;
+        // a name containing a single quote must stay a literal, not break out of the generated
+        // query
+        stat.executeUpdate("create table \"o'parent\" (id integer primary key)");
+        stat.executeUpdate(
+                "create table child1 (id integer primary key, pid integer, foreign key(pid) references \"o'parent\"(id))");
+        try (ResultSet rs = meta.getExportedKeys(null, null, "o'parent")) {
+            assertThat(rs.next()).isTrue();
+            assertThat(rs.getString("PKTABLE_NAME")).isEqualTo("o'parent");
+            assertThat(rs.getString("FKTABLE_NAME")).isEqualTo("child1");
+        }
+    }
+
+    @Test
+    public void getCrossReferenceCatalogSchemaWithQuote() throws SQLException {
+        stat.executeUpdate("create table parent (id integer primary key)");
+        stat.executeUpdate(
+                "create table child1 (id integer primary key, pid integer, foreign key(pid) references parent(id))");
+        try (ResultSet rs =
+                meta.getCrossReference("ca'talog", "sch'ema", "parent", null, null, "child1")) {
+            assertThat(rs.next()).isFalse();
+        }
+    }
+
+    @Test
+    public void getColumnsTableNameWithQuote() throws SQLException {
+        stat.executeUpdate("create table \"o'brien\" (id integer, name text)");
+
+        ResultSet rs = meta.getColumns(null, null, "o'brien", "%");
+        assertThat(rs.next()).isTrue();
+        assertThat(rs.getString("TABLE_NAME")).isEqualTo("o'brien");
+        assertThat(rs.getString("COLUMN_NAME")).isEqualTo("id");
+        assertThat(rs.next()).isTrue();
+        assertThat(rs.getString("TABLE_NAME")).isEqualTo("o'brien");
+        assertThat(rs.getString("COLUMN_NAME")).isEqualTo("name");
+        assertThat(rs.next()).isFalse();
+    }
+
+    @Test
+    public void getColumnsPrecisionScale() throws SQLException {
+        stat.executeUpdate("create table gh_1215 (n numeric ( 10 , 5 ), d decimal ( 10 ))");
+
+        ResultSet rs = meta.getColumns(null, null, "gh_1215", "%");
+        assertThat(rs.next()).isTrue();
+        assertThat(rs.getString("COLUMN_NAME")).isEqualTo("n");
+        assertThat(rs.getString("TYPE_NAME")).isEqualTo("NUMERIC");
+        assertThat(rs.getString("COLUMN_SIZE")).isEqualTo("15");
+        assertThat(rs.getString("DECIMAL_DIGITS")).isEqualTo("5");
+        assertThat(rs.next()).isTrue();
+        assertThat(rs.getString("COLUMN_NAME")).isEqualTo("d");
+        assertThat(rs.getString("TYPE_NAME")).isEqualTo("DECIMAL");
+        assertThat(rs.getString("COLUMN_SIZE")).isEqualTo("10");
+        assertThat(rs.getString("DECIMAL_DIGITS")).isEqualTo("0");
+        assertThat(rs.next()).isFalse();
+    }
+
+    @Test
     public void getColumnsIncludingGenerated() throws SQLException {
         stat.executeUpdate("create table gh_724 (i integer,j integer generated always as (i))");
 
@@ -486,6 +580,29 @@ public class DBMetaDataTest {
         assertThat(rs.getString(24)).as("first column is not generated").isEqualTo("NO");
         assertThat(rs.next()).isTrue();
         assertThat(rs.getString(4)).as("second column is named 'j'").isEqualTo("j");
+        assertThat(rs.getString(24)).as("second column is generated").isEqualTo("YES");
+        assertThat(rs.next()).isFalse();
+    }
+
+    @Test
+    @DisplayName(
+            "Issue #1132 - Generated columns with stored in SQLite are not marked as generated")
+    public void getColumnsIncludingGeneratedStored() throws SQLException {
+        stat.executeUpdate(
+                "create table foo("
+                        + "\n"
+                        + "  id integer primary key,"
+                        + "\n"
+                        + "  bar int not null generated always as (id + 1) stored"
+                        + "\n"
+                        + ");");
+
+        ResultSet rs = meta.getColumns(null, null, "foo", "%");
+        assertThat(rs.next()).isTrue();
+        assertThat(rs.getString(4)).as("first column is named 'id'").isEqualTo("id");
+        assertThat(rs.getString(24)).as("first column is generated").isEqualTo("NO");
+        assertThat(rs.next()).isTrue();
+        assertThat(rs.getString(4)).as("second column is named 'bar'").isEqualTo("bar");
         assertThat(rs.getString(24)).as("second column is generated").isEqualTo("YES");
         assertThat(rs.next()).isFalse();
     }

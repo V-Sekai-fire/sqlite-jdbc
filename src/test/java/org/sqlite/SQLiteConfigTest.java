@@ -1,9 +1,12 @@
 package org.sqlite;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.*;
 
+import java.util.HashSet;
 import java.util.Properties;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.sqlite.SQLiteConfig.Pragma;
 
 public class SQLiteConfigTest {
 
@@ -15,6 +18,7 @@ public class SQLiteConfigTest {
         config.setDateStringFormat("yyyy/mm/dd");
         config.setDatePrecision("seconds");
         config.setDateClass("real");
+        config.setGetGeneratedKeys(false);
 
         Properties properties = config.toProperties();
 
@@ -24,6 +28,8 @@ public class SQLiteConfigTest {
                 .isEqualTo(SQLiteConfig.DatePrecision.SECONDS.name());
         assertThat(properties.getProperty(SQLiteConfig.Pragma.DATE_CLASS.getPragmaName()))
                 .isEqualTo(SQLiteConfig.DateClass.REAL.name());
+        assertThat(properties.getProperty(Pragma.JDBC_GET_GENERATED_KEYS.getPragmaName()))
+                .isEqualTo("false");
     }
 
     @Test
@@ -49,5 +55,62 @@ public class SQLiteConfigTest {
         assertThat(config.toProperties().getProperty(SQLiteConfig.Pragma.BUSY_TIMEOUT.pragmaName))
                 .isEqualTo("100");
         assertThat(config.getBusyTimeout()).isEqualTo(100);
+    }
+
+    @Test
+    public void setWalAutocheckpoint() {
+        SQLiteConfig config = new SQLiteConfig();
+        config.setWalAutocheckpoint(500);
+        assertThat(
+                        config.toProperties()
+                                .getProperty(
+                                        SQLiteConfig.Pragma.WAL_AUTOCHECKPOINT.getPragmaName()))
+                .isEqualTo("500");
+    }
+
+    @Test
+    public void setWalAutocheckpointDisabled() {
+        SQLiteConfig config = new SQLiteConfig();
+        config.setWalAutocheckpoint(0);
+        assertThat(
+                        config.toProperties()
+                                .getProperty(
+                                        SQLiteConfig.Pragma.WAL_AUTOCHECKPOINT.getPragmaName()))
+                .isEqualTo("0");
+    }
+
+    @Test
+    public void enableAutomaticIndex() {
+        SQLiteConfig config = new SQLiteConfig();
+        config.enableAutomaticIndex(false);
+        assertThat(
+                        config.toProperties()
+                                .getProperty(SQLiteConfig.Pragma.AUTOMATIC_INDEX.getPragmaName()))
+                .isEqualTo("false");
+    }
+
+    @Test
+    public void setCacheSpill() {
+        SQLiteConfig config = new SQLiteConfig();
+        config.setCacheSpill(false);
+        assertThat(
+                        config.toProperties()
+                                .getProperty(SQLiteConfig.Pragma.CACHE_SPILL.getPragmaName()))
+                .isEqualTo("false");
+        config.setCacheSpill(100);
+        assertThat(
+                        config.toProperties()
+                                .getProperty(SQLiteConfig.Pragma.CACHE_SPILL.getPragmaName()))
+                .isEqualTo("100");
+    }
+
+    @Test
+    public void pragmaSet() {
+        Set<String> expectedPragmaSet = new HashSet<>();
+        for (Pragma v : SQLiteConfig.Pragma.values()) {
+            expectedPragmaSet.add(v.pragmaName);
+        }
+
+        assertThat(SQLiteConfig.pragmaSet).isEqualTo(expectedPragmaSet);
     }
 }

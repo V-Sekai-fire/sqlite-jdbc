@@ -1,0 +1,71 @@
+name: build-fdb-vfs
+on:
+  # pull_request already covers every commit on the branch a PR is open
+  # against; adding a push trigger doubles every run for no new signal.
+  # Keep workflow_dispatch so a fresh build can be kicked off from the UI.
+  pull_request:
+  workflow_dispatch:
+
+# One live run per ref is enough. A rapid re-push (typical while
+# iterating on the Makefile changes) cancels the older run instead of
+# queueing behind it -- ubuntu runners are shared and the build takes
+# minutes.
+concurrency:
+  group: build-fdb-vfs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-x86_64:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install FoundationDB client (7.3.63)
+        run: |
+          curl -LO https://github.com/apple/foundationdb/releases/download/7.3.63/foundationdb-clients_7.3.63-1_amd64.deb
+          sudo dpkg -i foundationdb-clients_7.3.63-1_amd64.deb
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v3
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+
+      - name: Install build toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential unzip curl
+
+      - name: Build the amalgamated native library (with FDB VFS baked in)
+        env:
+          WEFT_BUILD_FDB_VFS: "1"
+          FDB_CLIENT_INCLUDE: /usr/include/foundationdb
+        run: |
+          make native
+
+      - name: Confirm libsqlitejdbc.so carries the FDB VFS and links libfdb_c
+        run: |
+          set -eux
+          so=$(find src/main/resources/org/sqlite/native/Linux/x86_64 -name '*.so' | head -1)
+          test -n "$so"
+          # The Makefile strips the .so and internal weft_* symbols compile
+          # with -fvisibility=hidden, so `nm` sees nothing. The VFS zName
+          # string ("weft_fdb") stays in the binary as a rodata constant --
+          # its presence is the strip-safe way to confirm fdb_vfs.c was
+          # compiled in.
+          strings "$so" | grep -qx "weft_fdb" \
+            || (echo "weft_fdb VFS name not found in binary" && exit 1)
+          # And the runtime dep on libfdb_c must be recorded.
+          ldd "$so" | grep -E "libfdb_c" \
+            || (echo "libfdb_c not linked" && exit 1)
+
+      - name: Package the jar
+        run: |
+          mvn -B -Dmaven.test.skip=true package
+
+      - name: Upload sqlite-jdbc-fdb-vfs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sqlite-jdbc-fdb-vfs-linux-x86_64
+          path: target/*.jar

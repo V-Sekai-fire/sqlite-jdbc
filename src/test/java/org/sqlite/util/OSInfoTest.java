@@ -24,7 +24,7 @@ import org.junit.jupiter.api.condition.DisabledInNativeImage;
 import org.junitpioneer.jupiter.SetSystemProperty;
 
 @DisabledIfEnvironmentVariable(
-        named = "SKIP_TEST_OSINFO",
+        named = "SKIP_TEST_MULTIARCH",
         matches = "true",
         disabledReason = "Those tests would fail when ran on a musl based Linux")
 @DisabledInNativeImage
@@ -133,8 +133,8 @@ public class OSInfoTest {
     }
 
     @Nested
-    @SetSystemProperty(key = "java.runtime.name", value = "Java for Android")
-    @SetSystemProperty(key = "os.name", value = "Linux for Android")
+    @SetSystemProperty(key = "java.runtime.name", value = "Android Runtime")
+    @SetSystemProperty(key = "os.name", value = "Linux")
     class AndroidRuntime {
 
         @Test

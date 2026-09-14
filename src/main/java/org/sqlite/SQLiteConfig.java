@@ -188,6 +188,7 @@ public class SQLiteConfig {
 
         // exclude this "fake" pragma from execution
         pragmaParams.remove(Pragma.JDBC_EXPLICIT_READONLY.pragmaName);
+        pragmaParams.remove(Pragma.JDBC_GET_GENERATED_KEYS.pragmaName);
 
         Statement stat = conn.createStatement();
         try {
@@ -330,6 +331,9 @@ public class SQLiteConfig {
                 defaultConnectionConfig.getDateStringFormat());
         pragmaTable.setProperty(
                 Pragma.JDBC_EXPLICIT_READONLY.pragmaName, this.explicitReadOnly ? "true" : "false");
+        pragmaTable.setProperty(
+                Pragma.JDBC_GET_GENERATED_KEYS.pragmaName,
+                defaultConnectionConfig.isGetGeneratedKeys() ? "true" : "false");
         return pragmaTable;
     }
 
@@ -349,7 +353,9 @@ public class SQLiteConfig {
         return result;
     }
 
-    private static final String[] OnOff = new String[] {"true", "false"};
+    static class OnOff {
+        private static final String[] Values = new String[] {"true", "false"};
+    }
 
     static final Set<String> pragmaSet = new TreeSet<String>();
 
@@ -377,16 +383,27 @@ public class SQLiteConfig {
 
         // Parameters requiring SQLite3 API invocation
         OPEN_MODE("open_mode", "Database open-mode flag", null),
-        SHARED_CACHE("shared_cache", "Enable SQLite Shared-Cache mode, native driver only", OnOff),
+        SHARED_CACHE(
+                "shared_cache",
+                "Enable SQLite Shared-Cache mode, native driver only",
+                OnOff.Values),
         LOAD_EXTENSION(
                 "enable_load_extension",
                 "Enable SQLite load_extension() function, native driver only",
-                OnOff),
+                OnOff.Values),
 
         // Pragmas that can be set after opening the database
+        AUTOMATIC_INDEX(
+                "automatic_index",
+                "When automatic_index is on, SQLite may create transient indexes for queries that would otherwise do a full table scan",
+                OnOff.Values),
         CACHE_SIZE(
                 "cache_size",
                 "Maximum number of database disk pages that SQLite will hold in memory at once per open database file",
+                null),
+        CACHE_SPILL(
+                "cache_spill",
+                "When cache_spill is on, the pager can spill dirty cache pages to the database file in the middle of a transaction. An integer N sets the spill threshold in pages",
                 null),
         MMAP_SIZE(
                 "mmap_size",
@@ -395,24 +412,25 @@ public class SQLiteConfig {
         CASE_SENSITIVE_LIKE(
                 "case_sensitive_like",
                 "Installs a new application-defined LIKE function that is either case sensitive or insensitive depending on the value",
-                OnOff),
-        COUNT_CHANGES("count_changes", "Deprecated", OnOff),
+                OnOff.Values),
+        COUNT_CHANGES("count_changes", "Deprecated", OnOff.Values),
         DEFAULT_CACHE_SIZE("default_cache_size", "Deprecated", null),
         DEFER_FOREIGN_KEYS(
                 "defer_foreign_keys",
                 "When the defer_foreign_keys PRAGMA is on, enforcement of all foreign key constraints is delayed until the outermost transaction is committed. The defer_foreign_keys pragma defaults to OFF so that foreign key constraints are only deferred if they are created as \"DEFERRABLE INITIALLY DEFERRED\". The defer_foreign_keys pragma is automatically switched off at each COMMIT or ROLLBACK. Hence, the defer_foreign_keys pragma must be separately enabled for each transaction. This pragma is only meaningful if foreign key constraints are enabled, of course.",
-                OnOff),
-        EMPTY_RESULT_CALLBACKS("empty_result_callback", "Deprecated", OnOff),
+                OnOff.Values),
+        EMPTY_RESULT_CALLBACKS("empty_result_callback", "Deprecated", OnOff.Values),
         ENCODING(
                 "encoding",
                 "Set the encoding that the main database will be created with if it is created by this session",
                 toStringArray(Encoding.values())),
-        FOREIGN_KEYS("foreign_keys", "Set the enforcement of foreign key constraints", OnOff),
-        FULL_COLUMN_NAMES("full_column_names", "Deprecated", OnOff),
+        FOREIGN_KEYS(
+                "foreign_keys", "Set the enforcement of foreign key constraints", OnOff.Values),
+        FULL_COLUMN_NAMES("full_column_names", "Deprecated", OnOff.Values),
         FULL_SYNC(
                 "fullsync",
                 "Whether or not the F_FULLFSYNC syncing method is used on systems that support it. Only Mac OS X supports F_FULLFSYNC.",
-                OnOff),
+                OnOff.Values),
         INCREMENTAL_VACUUM(
                 "incremental_vacuum",
                 "Causes up to N pages to be removed from the freelist. The database file is truncated by the same amount. The incremental_vacuum pragma has no effect if the database is not in auto_vacuum=incremental mode or if there are no pages on the freelist. If there are fewer than N pages on the freelist, or if N is less than 1, or if the \"(N)\" argument is omitted, then the entire freelist is cleared.",
@@ -425,8 +443,8 @@ public class SQLiteConfig {
                 "journal_size_limit",
                 "Limit the size of rollback-journal and WAL files left in the file-system after transactions or checkpoints",
                 null),
-        LEGACY_ALTER_TABLE("legacy_alter_table", "Use legacy alter table behavior", OnOff),
-        LEGACY_FILE_FORMAT("legacy_file_format", "No-op", OnOff),
+        LEGACY_ALTER_TABLE("legacy_alter_table", "Use legacy alter table behavior", OnOff.Values),
+        LEGACY_FILE_FORMAT("legacy_file_format", "No-op", OnOff.Values),
         LOCKING_MODE(
                 "locking_mode",
                 "Set the database connection locking-mode",
@@ -437,17 +455,18 @@ public class SQLiteConfig {
                 null),
         MAX_PAGE_COUNT(
                 "max_page_count", "Set the maximum number of pages in the database file", null),
-        READ_UNCOMMITTED("read_uncommitted", "Set READ UNCOMMITTED isolation", OnOff),
-        RECURSIVE_TRIGGERS("recursive_triggers", "Set the recursive trigger capability", OnOff),
+        READ_UNCOMMITTED("read_uncommitted", "Set READ UNCOMMITTED isolation", OnOff.Values),
+        RECURSIVE_TRIGGERS(
+                "recursive_triggers", "Set the recursive trigger capability", OnOff.Values),
         REVERSE_UNORDERED_SELECTS(
                 "reverse_unordered_selects",
                 "When enabled, this PRAGMA causes many SELECT statements without an ORDER BY clause to emit their results in the reverse order from what they normally would",
-                OnOff),
+                OnOff.Values),
         SECURE_DELETE(
                 "secure_delete",
                 "When secure_delete is on, SQLite overwrites deleted content with zeros",
                 new String[] {"true", "false", "fast"}),
-        SHORT_COLUMN_NAMES("short_column_names", "Deprecated", OnOff),
+        SHORT_COLUMN_NAMES("short_column_names", "Deprecated", OnOff.Values),
         SYNCHRONOUS(
                 "synchronous",
                 "Set the \"synchronous\" flag",
@@ -464,6 +483,10 @@ public class SQLiteConfig {
         APPLICATION_ID(
                 "application_id",
                 "Set the 32-bit signed big-endian \"Application ID\" integer located at offset 68 into the database header. Applications that use SQLite as their application file-format should set the Application ID integer to a unique integer so that utilities such as file(1) can determine the specific file type rather than just reporting \"SQLite3 Database\"",
+                null),
+        WAL_AUTOCHECKPOINT(
+                "wal_autocheckpoint",
+                "The wal_autocheckpoint pragma sets the write-ahead log auto-checkpoint interval. If the argument N is specified, then the auto-checkpoint is adjusted to fire whenever the WAL has N or more pages. Passing zero or a negative value turns off automatic checkpointing entirely. The default auto-checkpoint interval is 1000 or SQLITE_DEFAULT_WAL_AUTOCHECKPOINT.",
                 null),
 
         // Limits
@@ -535,7 +558,9 @@ public class SQLiteConfig {
 
         // extensions: "fake" pragmas to allow conformance with JDBC
         JDBC_EXPLICIT_READONLY(
-                "jdbc.explicit_readonly", "Set explicit read only transactions", null);
+                "jdbc.explicit_readonly", "Set explicit read only transactions", null),
+        JDBC_GET_GENERATED_KEYS(
+                "jdbc.get_generated_keys", "Enable retrieval of generated keys", OnOff.Values);
 
         public final String pragmaName;
         public final String[] choices;
@@ -553,6 +578,20 @@ public class SQLiteConfig {
             this.pragmaName = pragmaName;
             this.description = description;
             this.choices = choices;
+        }
+
+        /**
+         * Convert the given enum values to a string array
+         *
+         * @param list Array if PragmaValue.
+         * @return String array of Enum values
+         */
+        private static String[] toStringArray(PragmaValue[] list) {
+            String[] result = new String[list.length];
+            for (int i = 0; i < list.length; i++) {
+                result[i] = list[i].getValue();
+            }
+            return result;
         }
 
         public final String getPragmaName() {
@@ -635,6 +674,42 @@ public class SQLiteConfig {
     }
 
     /**
+     * Enables or disables automatic indexes. When enabled, SQLite may create transient indexes for
+     * queries that would otherwise do a full table scan.
+     *
+     * @param enable True to enable; false to disable.
+     * @see <a
+     *     href="https://www.sqlite.org/pragma.html#pragma_automatic_index">www.sqlite.org/pragma.html#pragma_automatic_index</a>
+     */
+    public void enableAutomaticIndex(boolean enable) {
+        set(Pragma.AUTOMATIC_INDEX, enable);
+    }
+
+    /**
+     * Enables or disables cache spill. When enabled, the pager can write dirty cache pages to the
+     * database file in the middle of a transaction.
+     *
+     * @param enable True to enable; false to disable.
+     * @see <a
+     *     href="https://www.sqlite.org/pragma.html#pragma_cache_spill">www.sqlite.org/pragma.html#pragma_cache_spill</a>
+     */
+    public void setCacheSpill(boolean enable) {
+        set(Pragma.CACHE_SPILL, enable);
+    }
+
+    /**
+     * Sets the cache-spill threshold in pages. Dirty pages are spilled when that many pages of
+     * cache are dirty.
+     *
+     * @param numberOfPages Spill threshold in pages.
+     * @see <a
+     *     href="https://www.sqlite.org/pragma.html#pragma_cache_spill">www.sqlite.org/pragma.html#pragma_cache_spill</a>
+     */
+    public void setCacheSpill(int numberOfPages) {
+        set(Pragma.CACHE_SPILL, numberOfPages);
+    }
+
+    /**
      * Enables or disables case sensitive for the LIKE operator.
      *
      * @param enable True to enable; false to disable.
@@ -698,20 +773,6 @@ public class SQLiteConfig {
      */
     private static interface PragmaValue {
         public String getValue();
-    }
-
-    /**
-     * Convert the given enum values to a string array
-     *
-     * @param list Array if PragmaValue.
-     * @return String array of Enum values
-     */
-    private static String[] toStringArray(PragmaValue[] list) {
-        String[] result = new String[list.length];
-        for (int i = 0; i < list.length; i++) {
-            result[i] = list[i].getValue();
-        }
-        return result;
     }
 
     public enum Encoding implements PragmaValue {
@@ -1083,6 +1144,21 @@ public class SQLiteConfig {
         set(Pragma.APPLICATION_ID, id);
     }
 
+    /**
+     * Sets the write-ahead log auto-checkpoint interval. The auto-checkpoint fires whenever the WAL
+     * reaches #pages. Setting the auto-checkpoint size to zero or a negative value turns
+     * auto-checkpointing off. The default interval is 1000 pages (or {@code
+     * SQLITE_DEFAULT_WAL_AUTOCHECKPOINT}).
+     *
+     * @param pages the number of WAL pages that triggers an automatic checkpoint; zero or negative
+     *     disables auto-checkpointing
+     * @see <a href=
+     *     "https://www.sqlite.org/pragma.html#pragma_wal_autocheckpoint">www.sqlite.org/pragma.html#pragma_wal_autocheckpoint</a>
+     */
+    public void setWalAutocheckpoint(int pages) {
+        set(Pragma.WAL_AUTOCHECKPOINT, pages);
+    }
+
     public enum TransactionMode implements PragmaValue {
         DEFERRED,
         IMMEDIATE,
@@ -1175,5 +1251,13 @@ public class SQLiteConfig {
 
     public int getBusyTimeout() {
         return busyTimeout;
+    }
+
+    public boolean isGetGeneratedKeys() {
+        return this.defaultConnectionConfig.isGetGeneratedKeys();
+    }
+
+    public void setGetGeneratedKeys(boolean generatedKeys) {
+        this.defaultConnectionConfig.setGetGeneratedKeys(generatedKeys);
     }
 }
