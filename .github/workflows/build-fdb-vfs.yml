@@ -30,8 +30,7 @@ jobs:
 
       - name: Build the amalgamated native library (with FDB VFS baked in)
         env:
-          CCFLAGS: -I/usr/include/foundationdb -DFDB_API_VERSION=730
-          LINKFLAGS: -L/usr/lib -Wl,-rpath,/usr/lib
+          FDB_CLIENT_INCLUDE: /usr/include/foundationdb
         run: |
           make native
 
