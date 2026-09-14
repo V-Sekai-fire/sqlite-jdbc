@@ -30,6 +30,13 @@ on:
       - '**.dll'
       - '.github/workflows/*.yml'
 
+# One live run per ref across pull_request and push. The upstream
+# workflow fires both triggers on the same commit, and cancel-in-progress
+# collapses them to a single run rather than two full CI passes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     name: Check code formatting
