@@ -1,7 +1,8 @@
 name: build-fdb-vfs
 on:
-  push:
-    branches: [feat/fdb-vfs]
+  # pull_request already covers every commit on the branch a PR is open
+  # against; adding a push trigger doubles every run for no new signal.
+  # Keep workflow_dispatch so a fresh build can be kicked off from the UI.
   pull_request:
   workflow_dispatch:
 
