@@ -5,6 +5,14 @@ on:
   pull_request:
   workflow_dispatch:
 
+# One live run per ref is enough. A rapid re-push (typical while
+# iterating on the Makefile changes) cancels the older run instead of
+# queueing behind it -- ubuntu runners are shared and the build takes
+# minutes.
+concurrency:
+  group: build-fdb-vfs-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   linux-x86_64:
     runs-on: ubuntu-22.04
