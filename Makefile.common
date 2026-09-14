@@ -273,11 +273,16 @@ ifneq ($(jni_md_include),)
 CCFLAGS := $(CCFLAGS) -I"$(jni_md_include)"
 endif
 
-# The FoundationDB-backed VFS is compiled into the amalgamation via
-# `cat src/main/ext/*.c >> sqlite3.c` (same trick the extension functions
-# use). Its own headers live in src/main/ext, and it needs the FDB C
-# client's api-version macro visible before fdb_c.h is included. The
-# runtime libfdb_c.so is linked via -lfdb_c in the per-target Makefile.
+# The FoundationDB-backed VFS is an opt-in for this fork: setting
+# WEFT_BUILD_FDB_VFS=1 concatenates src/main/ext/fdb/fdb_vfs.c into the
+# amalgamation, links libfdb_c, and lets JNI_OnLoad register the VFS at
+# library load. Unset (the default) leaves every build path identical
+# to upstream xerial/sqlite-jdbc, which the CI test-jobs on runners
+# without an FDB client depend on.
+WEFT_BUILD_FDB_VFS ?= 0
+ifeq ($(WEFT_BUILD_FDB_VFS),1)
 FDB_CLIENT_INCLUDE ?= /usr/local/include/foundationdb
-CCFLAGS := $(CCFLAGS) -Isrc/main/ext -I$(FDB_CLIENT_INCLUDE) -DFDB_API_VERSION=730
+CCFLAGS := $(CCFLAGS) -Isrc/main/ext/fdb -I$(FDB_CLIENT_INCLUDE) -DFDB_API_VERSION=730 -DWEFT_FDB_VFS_ENABLED=1
+LINKFLAGS := $(LINKFLAGS) -lfdb_c
+endif
 

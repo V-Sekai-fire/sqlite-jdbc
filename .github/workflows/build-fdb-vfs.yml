@@ -38,6 +38,7 @@ jobs:
 
       - name: Build the amalgamated native library (with FDB VFS baked in)
         env:
+          WEFT_BUILD_FDB_VFS: "1"
           FDB_CLIENT_INCLUDE: /usr/include/foundationdb
         run: |
           make native
