@@ -34,15 +34,18 @@ jobs:
         run: |
           make native
 
-      - name: Confirm libsqlitejdbc.so has the FDB VFS symbols and links libfdb_c
+      - name: Confirm libsqlitejdbc.so carries the FDB VFS and links libfdb_c
         run: |
           set -eux
           so=$(find src/main/resources/org/sqlite/native/Linux/x86_64 -name '*.so' | head -1)
           test -n "$so"
-          # sqlite-jdbc builds with -fvisibility=hidden, so weft_* symbols are
-          # not in the dynamic table; --defined-only sees the internal ones.
-          nm --defined-only "$so" | grep -E "weft_fdb_start|weft_vfs_register" \
-            || (echo "weft_* symbols not compiled in" && exit 1)
+          # The Makefile strips the .so and internal weft_* symbols compile
+          # with -fvisibility=hidden, so `nm` sees nothing. The VFS zName
+          # string ("weft_fdb") stays in the binary as a rodata constant --
+          # its presence is the strip-safe way to confirm fdb_vfs.c was
+          # compiled in.
+          strings "$so" | grep -qx "weft_fdb" \
+            || (echo "weft_fdb VFS name not found in binary" && exit 1)
           # And the runtime dep on libfdb_c must be recorded.
           ldd "$so" | grep -E "libfdb_c" \
             || (echo "libfdb_c not linked" && exit 1)
