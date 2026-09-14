@@ -20,6 +20,15 @@
 #include "NativeDB.h"
 #include "sqlite3.h"
 
+// FoundationDB-backed VFS, statically compiled in from src/main/ext/fdb_vfs.c
+// so it shares this JNI library's private SQLite instance instead of trying
+// to reach a system libsqlite3. weft_fdb_start opens the FDB client using
+// $WEFT_FDB_CLUSTER_FILE (or the default path) and weft_vfs_register adds
+// "weft_fdb" to the VFS list. Failure is silent by design -- the JVM must
+// still start with a working default VFS even when no FDB cluster is up.
+extern int weft_fdb_start(const char *cluster_file);
+extern int weft_vfs_register(int make_default);
+
 // Java class variables and method references initialized on library load.
 // These classes are weak references to that if the classloader is no longer referenced (garbage)
 // It can be garbage collected. The weak references are freed on unload.
@@ -506,6 +515,14 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
     bool_array_class = (*env)->FindClass(env, "[Z");
     if(!bool_array_class) return JNI_ERR;
     bool_array_class = (*env)->NewWeakGlobalRef(env, bool_array_class);
+
+    // Bring the FoundationDB VFS online in the same SQLite instance JNI opens
+    // against. WEFT_FDB_SKIP=1 keeps the JNI usable on machines with no FDB
+    // client installed (test runners, dev laptops).
+    if (getenv("WEFT_FDB_SKIP") == NULL) {
+        int rc = weft_fdb_start(getenv("WEFT_FDB_CLUSTER_FILE"));
+        if (rc == 0) weft_vfs_register(0);
+    }
 
     return JNI_VERSION_1_2;
 }
