@@ -273,3 +273,11 @@ ifneq ($(jni_md_include),)
 CCFLAGS := $(CCFLAGS) -I"$(jni_md_include)"
 endif
 
+# The FoundationDB-backed VFS is compiled into the amalgamation via
+# `cat src/main/ext/*.c >> sqlite3.c` (same trick the extension functions
+# use). Its own headers live in src/main/ext, and it needs the FDB C
+# client's api-version macro visible before fdb_c.h is included. The
+# runtime libfdb_c.so is linked via -lfdb_c in the per-target Makefile.
+FDB_CLIENT_INCLUDE ?= /usr/local/include/foundationdb
+CCFLAGS := $(CCFLAGS) -Isrc/main/ext -I$(FDB_CLIENT_INCLUDE) -DFDB_API_VERSION=730
+
