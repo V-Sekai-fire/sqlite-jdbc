@@ -15,16 +15,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  linux-x86_64:
-    runs-on: ubuntu-22.04
+  build:
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-22.04
+            deb_arch: amd64
+          - arch: aarch64
+            runner: ubuntu-22.04-arm
+            deb_arch: aarch64
     steps:
       - uses: actions/checkout@v4
 
       - name: Install FoundationDB client (7.3.63)
         run: |
-          curl -LO https://github.com/apple/foundationdb/releases/download/7.3.63/foundationdb-clients_7.3.63-1_amd64.deb
-          sudo dpkg -i foundationdb-clients_7.3.63-1_amd64.deb
+          curl -LO https://github.com/apple/foundationdb/releases/download/7.3.63/foundationdb-clients_7.3.63-1_${{ matrix.deb_arch }}.deb
+          sudo dpkg -i foundationdb-clients_7.3.63-1_${{ matrix.deb_arch }}.deb
 
       - name: Set up JDK 11
         uses: actions/setup-java@v3
@@ -47,7 +57,7 @@ jobs:
       - name: Confirm libsqlitejdbc.so carries the FDB VFS and links libfdb_c
         run: |
           set -eux
-          so=$(find src/main/resources/org/sqlite/native/Linux/x86_64 -name '*.so' | head -1)
+          so=$(find src/main/resources/org/sqlite/native/Linux/${{ matrix.arch }} -name '*.so' | head -1)
           test -n "$so"
           # The Makefile strips the .so and internal weft_* symbols compile
           # with -fvisibility=hidden, so `nm` sees nothing. The VFS zName
@@ -67,5 +77,5 @@ jobs:
       - name: Upload sqlite-jdbc-fdb-vfs artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sqlite-jdbc-fdb-vfs-linux-x86_64
+          name: sqlite-jdbc-fdb-vfs-linux-${{ matrix.arch }}
           path: target/*.jar
